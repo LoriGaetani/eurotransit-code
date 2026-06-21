@@ -196,81 +196,81 @@ jobs:
       # ---------------------------------------------------------
 
 
-#      - name: Checkout manifests repository
-#        if: ${{ steps.version.outputs.released == 'true' }}
-#        uses: actions/checkout@v4
-#        with:
-#          repository: LoriGaetani/eurotransit-deploy
-#          ref: master
-#          token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
-#          path: manifests
-#
-#      - name: Install yq
-#        if: ${{ steps.version.outputs.released == 'true' }}
-#        run: |
-#          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-#          sudo chmod +x /usr/local/bin/yq
-#          yq --version
-#
-#      - name: Update image tags in Helm values
-#        if: ${{ steps.version.outputs.released == 'true' }}
-#        working-directory: manifests
-#        env:
-#          VERSION: ${{ steps.version.outputs.version }}
-#          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-#          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
-#          CATALOG_CHANGED: ${{ needs.changes.outputs.catalog }}
-#          GLOBAL_CHANGED: ${{ needs.changes.outputs.global }}
-#          VALUES_FILE: deploy/charts/eurotransit-app/values.yaml
-#        run: |
-#          set -euo pipefail
-#
-#          echo "Updating Helm values to version: ${VERSION}"
-#          echo "Using values file: ${VALUES_FILE}"
-#
-#          if [ ! -f "${VALUES_FILE}" ]; then
-#            echo "ERROR: ${VALUES_FILE} not found"
-#            echo "Files found in manifests repository:"
-#            find . -maxdepth 5 -type f | sort
-#            exit 1
-#          fi
-#
-#          if [ "${FRONTEND_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
-#            echo "Updating frontend image"
-#            yq -i '.frontend.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-frontend"' "${VALUES_FILE}"
-#            yq -i '.frontend.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
-#          else
-#            echo "Frontend unchanged, skipping"
-#          fi
-#
-#          if [ "${CATALOG_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
-#            echo "Updating catalog image"
-#            yq -i '.catalog.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-catalog"' "${VALUES_FILE}"
-#            yq -i '.catalog.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
-#          else
-#            echo "catalog unchanged, skipping"
-#          fi
-#
-#          echo "Updated values.yaml:"
-#          cat "${VALUES_FILE}"
-#
-#      - name: Create pull request in manifests repository
-#        if: ${{ steps.version.outputs.released == 'true' }}
-#        uses: peter-evans/create-pull-request@v8
-#        with:
-#          token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
-#          path: manifests
-#          base: master
-#          branch: update-images-${{ steps.version.outputs.version }}
-#          delete-branch: true
-#          commit-message: "chore: update images to ${{ steps.version.outputs.version }}"
-#          title: "Update images to ${{ steps.version.outputs.version }}"
-#          body: |
-#            Aggiorna i tag Docker alla versione `${{ steps.version.outputs.version }}`.
-#
-#            Immagini aggiornate automaticamente dalla pipeline del repository applicativo.
-#
-#            Cambiamenti rilevati:
-#            - frontend: `${{ needs.changes.outputs.frontend }}`
-#            - backend: `${{ needs.changes.outputs.catalog }}`
-#            - global: `${{ needs.changes.outputs.global }}`
+      - name: Checkout manifests repository
+        if: ${{ steps.version.outputs.released == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: LoriGaetani/eurotransit-deploy
+          ref: master
+          token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
+          path: manifests
+
+      - name: Install yq
+        if: ${{ steps.version.outputs.released == 'true' }}
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Update image tags in Helm values
+        if: ${{ steps.version.outputs.released == 'true' }}
+        working-directory: manifests
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+          CATALOG_CHANGED: ${{ needs.changes.outputs.catalog }}
+          GLOBAL_CHANGED: ${{ needs.changes.outputs.global }}
+          VALUES_FILE: deploy/charts/eurotransit-app/values.yaml
+        run: |
+          set -euo pipefail
+
+          echo "Updating Helm values to version: ${VERSION}"
+          echo "Using values file: ${VALUES_FILE}"
+
+          if [ ! -f "${VALUES_FILE}" ]; then
+            echo "ERROR: ${VALUES_FILE} not found"
+            echo "Files found in manifests repository:"
+            find . -maxdepth 5 -type f | sort
+            exit 1
+          fi
+
+          if [ "${FRONTEND_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
+            echo "Updating frontend image"
+            yq -i '.services.frontend.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-frontend"' "${VALUES_FILE}"
+            yq -i '.services.frontend.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
+          else
+            echo "Frontend unchanged, skipping"
+          fi
+
+          if [ "${CATALOG_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
+            echo "Updating catalog image"
+            yq -i '.services.catalog.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-catalog"' "${VALUES_FILE}"
+            yq -i '.services.catalog.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
+          else
+            echo "catalog unchanged, skipping"
+          fi
+
+          echo "Updated values.yaml:"
+          cat "${VALUES_FILE}"
+
+      - name: Create pull request in manifests repository
+        if: ${{ steps.version.outputs.released == 'true' }}
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
+          path: manifests
+          base: master
+          branch: update-images-${{ steps.version.outputs.version }}
+          delete-branch: true
+          commit-message: "chore: update images to ${{ steps.version.outputs.version }}"
+          title: "Update images to ${{ steps.version.outputs.version }}"
+          body: |
+            Aggiorna i tag Docker alla versione `${{ steps.version.outputs.version }}`.
+
+            Immagini aggiornate automaticamente dalla pipeline del repository applicativo.
+
+            Cambiamenti rilevati:
+            - frontend: `${{ needs.changes.outputs.frontend }}`
+            - backend: `${{ needs.changes.outputs.catalog }}`
+            - global: `${{ needs.changes.outputs.global }}`
