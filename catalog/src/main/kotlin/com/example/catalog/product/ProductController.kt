@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-@RequestMapping("/products")
+@RequestMapping("/catalog/products")
 class ProductController(
     private val productService: ProductService,
 ) {
