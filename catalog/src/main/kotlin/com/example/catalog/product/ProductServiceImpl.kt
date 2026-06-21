@@ -59,3 +59,4 @@ class ProductServiceImpl(
             price = price,
         )
 }
+
