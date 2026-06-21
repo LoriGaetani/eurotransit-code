@@ -27,7 +27,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       catalog: ${{ steps.filter.outputs.catalog }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -55,10 +55,10 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -85,10 +85,10 @@ jobs:
       run:
         working-directory: catalog
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: 21
           distribution: temurin
@@ -122,12 +122,12 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
 
@@ -198,10 +198,9 @@ jobs:
 
       - name: Checkout manifests repository
         if: ${{ steps.version.outputs.released == 'true' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: LoriGaetani/eurotransit-deploy
-          ref: master
           token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
           path: manifests
 
@@ -260,7 +259,6 @@ jobs:
         with:
           token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
           path: manifests
-          base: master
           branch: update-images-${{ steps.version.outputs.version }}
           delete-branch: true
           commit-message: "chore: update images to ${{ steps.version.outputs.version }}"
