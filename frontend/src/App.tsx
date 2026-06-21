@@ -33,6 +33,8 @@ const currencyFormatter = new Intl.NumberFormat('it-IT', {
   currency: 'EUR',
 })
 
+const productsPath = '/catalog/products'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     headers: {
@@ -99,7 +101,7 @@ function App() {
     setError(null)
 
     try {
-      const data = await request<Product[]>('/products')
+      const data = await request<Product[]>(productsPath)
       setProducts(data)
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Errore inatteso')
@@ -113,7 +115,7 @@ function App() {
 
     async function loadInitialProducts() {
       try {
-        const data = await request<Product[]>('/products')
+        const data = await request<Product[]>(productsPath)
 
         if (isMounted) {
           setProducts(data)
@@ -164,12 +166,12 @@ function App() {
       const payload = toPayload(form)
 
       if (selectedProduct) {
-        await request<Product>(`/products/${selectedProduct.id}`, {
+        await request<Product>(`${productsPath}/${selectedProduct.id}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         })
       } else {
-        await request<Product>('/products', {
+        await request<Product>(productsPath, {
           method: 'POST',
           body: JSON.stringify(payload),
         })
@@ -195,7 +197,7 @@ function App() {
     setError(null)
 
     try {
-      await request<void>(`/products/${product.id}`, { method: 'DELETE' })
+      await request<void>(`${productsPath}/${product.id}`, { method: 'DELETE' })
 
       if (selectedProduct?.id === product.id) {
         startCreate()
