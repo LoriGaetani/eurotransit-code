@@ -274,3 +274,4 @@ jobs:
             - frontend: `${{ needs.changes.outputs.frontend }}`
             - backend: `${{ needs.changes.outputs.catalog }}`
             - global: `${{ needs.changes.outputs.global }}`
+            
