@@ -28,3 +28,10 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+logging:
+  level:
+    com.example.catalog: INFO
+    org.flywaydb: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+    com.zaxxer.hikari: INFO
