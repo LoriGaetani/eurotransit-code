@@ -1,11 +1,23 @@
 spring:
   application:
     name: catalog
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/catalog}
+    username: ${SPRING_DATASOURCE_USERNAME:catalog}
+    password: ${SPRING_DATASOURCE_PASSWORD:catalog}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,flyway
   endpoint:
     health:
       probes:

@@ -1,121 +1,361 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import './App.css'
 
+type Product = {
+  id: number
+  name: string
+  description: string
+  category: string
+  price: number
+}
+
+type ProductForm = {
+  name: string
+  description: string
+  category: string
+  price: string
+}
+
+type ApiError = {
+  message?: string
+}
+
+const emptyForm: ProductForm = {
+  name: '',
+  description: '',
+  category: '',
+  price: '',
+}
+
+const currencyFormatter = new Intl.NumberFormat('it-IT', {
+  style: 'currency',
+  currency: 'EUR',
+})
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+    ...init,
+  })
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`
+
+    try {
+      const body = (await response.json()) as ApiError
+      message = body.message || message
+    } catch {
+      const text = await response.text()
+      message = text || message
+    }
+
+    throw new Error(message)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return response.json() as Promise<T>
+}
+
+function toForm(product: Product): ProductForm {
+  return {
+    name: product.name,
+    description: product.description,
+    category: product.category,
+    price: String(product.price),
+  }
+}
+
+function toPayload(form: ProductForm) {
+  return {
+    name: form.name.trim(),
+    description: form.description.trim(),
+    category: form.category.trim(),
+    price: Number(form.price),
+  }
+}
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [products, setProducts] = useState<Product[]>([])
+  const [form, setForm] = useState<ProductForm>(emptyForm)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const totalValue = useMemo(
+    () => products.reduce((sum, product) => sum + Number(product.price), 0),
+    [products],
+  )
+
+  async function loadProducts() {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const data = await request<Product[]>('/products')
+      setProducts(data)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Errore inatteso')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadProducts()
+  }, [])
+
+  function handleChange(field: keyof ProductForm, value: string) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  function startCreate() {
+    setSelectedProduct(null)
+    setForm(emptyForm)
+    setError(null)
+  }
+
+  function startEdit(product: Product) {
+    setSelectedProduct(product)
+    setForm(toForm(product))
+    setError(null)
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSaving(true)
+    setError(null)
+
+    try {
+      const payload = toPayload(form)
+
+      if (selectedProduct) {
+        await request<Product>(`/products/${selectedProduct.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        })
+      } else {
+        await request<Product>('/products', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+      }
+
+      setForm(emptyForm)
+      setSelectedProduct(null)
+      await loadProducts()
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Errore inatteso')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete(product: Product) {
+    const confirmed = window.confirm(`Eliminare "${product.name}"?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    setError(null)
+
+    try {
+      await request<void>(`/products/${product.id}`, { method: 'DELETE' })
+
+      if (selectedProduct?.id === product.id) {
+        startCreate()
+      }
+
+      await loadProducts()
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Errore inatteso')
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark">ET</span>
+          <div>
+            <strong>EuroTransit</strong>
+            <span>Catalog Console</span>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        <nav className="nav-list" aria-label="Sezioni">
+          <a className="active" href="#products">Products</a>
+          <a href="#inventory">Inventory</a>
+          <a href="#settings">Settings</a>
+        </nav>
+      </aside>
 
-      <div className="ticks"></div>
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Catalog</p>
+            <h1>Products</h1>
+          </div>
+          <button type="button" className="secondary-button" onClick={loadProducts}>
+            Refresh
+          </button>
+        </header>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {error && (
+          <div className="alert" role="alert">
+            {error}
+          </div>
+        )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <section className="summary-grid" aria-label="Riepilogo prodotti">
+          <article>
+            <span>Records</span>
+            <strong>{products.length}</strong>
+          </article>
+          <article>
+            <span>Total value</span>
+            <strong>{currencyFormatter.format(totalValue)}</strong>
+          </article>
+          <article>
+            <span>Status</span>
+            <strong>{isLoading ? 'Syncing' : 'Ready'}</strong>
+          </article>
+        </section>
+
+        <div className="content-grid" id="products">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h2>Product list</h2>
+                <p>Products exposed by the catalog backend.</p>
+              </div>
+              <button type="button" className="primary-button" onClick={startCreate}>
+                New product
+              </button>
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th className="numeric">Price</th>
+                    <th className="actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={4} className="empty-state">Loading products...</td>
+                    </tr>
+                  ) : products.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="empty-state">No products found.</td>
+                    </tr>
+                  ) : (
+                    products.map((product) => (
+                      <tr key={product.id}>
+                        <td>
+                          <button
+                            type="button"
+                            className="row-title"
+                            onClick={() => startEdit(product)}
+                          >
+                            {product.name}
+                          </button>
+                          <span>{product.description}</span>
+                        </td>
+                        <td>{product.category}</td>
+                        <td className="numeric">{currencyFormatter.format(product.price)}</td>
+                        <td className="actions">
+                          <button type="button" onClick={() => startEdit(product)}>
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => void handleDelete(product)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="panel form-panel">
+            <div className="panel-header">
+              <div>
+                <h2>{selectedProduct ? 'Edit product' : 'Create product'}</h2>
+                <p>{selectedProduct ? `ID ${selectedProduct.id}` : 'Add a catalog record.'}</p>
+              </div>
+            </div>
+
+            <form onSubmit={(event) => void handleSubmit(event)}>
+              <label>
+                Name
+                <input
+                  required
+                  value={form.name}
+                  onChange={(event) => handleChange('name', event.target.value)}
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  required
+                  rows={4}
+                  value={form.description}
+                  onChange={(event) => handleChange('description', event.target.value)}
+                />
+              </label>
+              <label>
+                Category
+                <input
+                  required
+                  value={form.category}
+                  onChange={(event) => handleChange('category', event.target.value)}
+                />
+              </label>
+              <label>
+                Price
+                <input
+                  required
+                  min="0"
+                  step="0.01"
+                  type="number"
+                  value={form.price}
+                  onChange={(event) => handleChange('price', event.target.value)}
+                />
+              </label>
+              <div className="form-actions">
+                <button type="submit" className="primary-button" disabled={isSaving}>
+                  {isSaving ? 'Saving...' : selectedProduct ? 'Save changes' : 'Create'}
+                </button>
+                <button type="button" className="secondary-button" onClick={startCreate}>
+                  Reset
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
   )
 }
 
