@@ -136,7 +136,7 @@ jobs:
 
       - name: Run semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          _GITHUB_TOKEN: ${{ secrets._GITHUB_TOKEN }}
         run: npx semantic-release
 
       - name: Check if a new release was created
