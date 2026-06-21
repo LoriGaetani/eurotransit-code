@@ -201,7 +201,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: LoriGaetani/eurotransit-deploy
-          ref: master
+          ref: main
           token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
           path: manifests
 
@@ -260,7 +260,7 @@ jobs:
         with:
           token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
           path: manifests
-          base: master
+          base: main
           branch: update-images-${{ steps.version.outputs.version }}
           delete-branch: true
           commit-message: "chore: update images to ${{ steps.version.outputs.version }}"
@@ -275,3 +275,4 @@ jobs:
             - backend: `${{ needs.changes.outputs.catalog }}`
             - global: `${{ needs.changes.outputs.global }}`
             
+          
