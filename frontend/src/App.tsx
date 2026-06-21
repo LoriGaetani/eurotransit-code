@@ -109,7 +109,31 @@ function App() {
   }
 
   useEffect(() => {
-    void loadProducts()
+    let isMounted = true
+
+    async function loadInitialProducts() {
+      try {
+        const data = await request<Product[]>('/products')
+
+        if (isMounted) {
+          setProducts(data)
+        }
+      } catch (exception) {
+        if (isMounted) {
+          setError(exception instanceof Error ? exception.message : 'Errore inatteso')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadInitialProducts()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   function handleChange(field: keyof ProductForm, value: string) {
