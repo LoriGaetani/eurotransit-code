@@ -1,0 +1,276 @@
+name: CI
+
+# Trigger conditions: run on push or pull request to main/master
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# In case of concurrent pipeline (multiple push), skip the old one
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------
+  # JOB 0: Detect which modules changed
+  # -------------------------------------------------------------
+  changes:
+    name: Detect changed modules
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      global: ${{ steps.filter.outputs.global }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      catalog: ${{ steps.filter.outputs.catalog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            global:
+              - '.github/workflows/**'
+              - 'docker-compose*.yml'
+            frontend:
+              - 'frontend/**'
+            catalog:
+              - 'catalog/**'
+
+  # -------------------------------------------------------------
+  # JOB 1: Frontend (React + Vite + TypeScript)
+  # -------------------------------------------------------------
+  frontend:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' || needs.changes.outputs.global == 'true' }}
+    name: Frontend (React/Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  # -------------------------------------------------------------
+  # JOB 2: Backend Service (Kotlin/Java + Spring Boot)
+  # -------------------------------------------------------------
+  catalog:
+    needs: changes
+    if: ${{ needs.changes.outputs.catalog == 'true' || needs.changes.outputs.global == 'true' }}
+    name: Catalog Service (Spring Boot)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: catalog
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # Compile and assemble the project;
+      - name: Build
+        run: ./gradlew build
+
+  release:
+    name: Release and publish Docker images
+    needs: [ changes, frontend, catalog ]
+    if: >
+      ${{
+        always() &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/master' &&
+        !cancelled() &&
+        !failure()
+      }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install release dependencies
+        run: npm ci
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Check if a new release was created
+        id: version
+        run: |
+          if [ ! -f .version ]; then
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION="$(cat .version)"
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install just
+        if: ${{ steps.version.outputs.released == 'true' }}
+        uses: extractions/setup-just@v3
+
+      - name: Login to Docker Hub
+        if: ${{ steps.version.outputs.released == 'true' }}
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: just docker-login
+
+      - name: Build and push frontend image
+        if: >
+          ${{
+            steps.version.outputs.released == 'true' &&
+            (
+              needs.changes.outputs.frontend == 'true' ||
+              needs.changes.outputs.global == 'true'
+            )
+          }}
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: just docker-build-push frontend
+
+      - name: Build and push backend image
+        if: >
+          ${{
+            steps.version.outputs.released == 'true' &&
+            (
+              needs.changes.outputs.catalog == 'true' ||
+              needs.changes.outputs.global == 'true'
+            )
+          }}
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: just docker-build-push catalog
+      # ---------------------------------------------------------
+      # Update Kubernetes manifests repository
+      # ---------------------------------------------------------
+
+
+#      - name: Checkout manifests repository
+#        if: ${{ steps.version.outputs.released == 'true' }}
+#        uses: actions/checkout@v4
+#        with:
+#          repository: LoriGaetani/eurotransit-deploy
+#          ref: master
+#          token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
+#          path: manifests
+#
+#      - name: Install yq
+#        if: ${{ steps.version.outputs.released == 'true' }}
+#        run: |
+#          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+#          sudo chmod +x /usr/local/bin/yq
+#          yq --version
+#
+#      - name: Update image tags in Helm values
+#        if: ${{ steps.version.outputs.released == 'true' }}
+#        working-directory: manifests
+#        env:
+#          VERSION: ${{ steps.version.outputs.version }}
+#          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+#          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+#          CATALOG_CHANGED: ${{ needs.changes.outputs.catalog }}
+#          GLOBAL_CHANGED: ${{ needs.changes.outputs.global }}
+#          VALUES_FILE: deploy/charts/eurotransit-app/values.yaml
+#        run: |
+#          set -euo pipefail
+#
+#          echo "Updating Helm values to version: ${VERSION}"
+#          echo "Using values file: ${VALUES_FILE}"
+#
+#          if [ ! -f "${VALUES_FILE}" ]; then
+#            echo "ERROR: ${VALUES_FILE} not found"
+#            echo "Files found in manifests repository:"
+#            find . -maxdepth 5 -type f | sort
+#            exit 1
+#          fi
+#
+#          if [ "${FRONTEND_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
+#            echo "Updating frontend image"
+#            yq -i '.frontend.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-frontend"' "${VALUES_FILE}"
+#            yq -i '.frontend.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
+#          else
+#            echo "Frontend unchanged, skipping"
+#          fi
+#
+#          if [ "${CATALOG_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
+#            echo "Updating catalog image"
+#            yq -i '.catalog.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-catalog"' "${VALUES_FILE}"
+#            yq -i '.catalog.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
+#          else
+#            echo "catalog unchanged, skipping"
+#          fi
+#
+#          echo "Updated values.yaml:"
+#          cat "${VALUES_FILE}"
+#
+#      - name: Create pull request in manifests repository
+#        if: ${{ steps.version.outputs.released == 'true' }}
+#        uses: peter-evans/create-pull-request@v8
+#        with:
+#          token: ${{ secrets.MANIFESTS_REPO_TOKEN }}
+#          path: manifests
+#          base: master
+#          branch: update-images-${{ steps.version.outputs.version }}
+#          delete-branch: true
+#          commit-message: "chore: update images to ${{ steps.version.outputs.version }}"
+#          title: "Update images to ${{ steps.version.outputs.version }}"
+#          body: |
+#            Aggiorna i tag Docker alla versione `${{ steps.version.outputs.version }}`.
+#
+#            Immagini aggiornate automaticamente dalla pipeline del repository applicativo.
+#
+#            Cambiamenti rilevati:
+#            - frontend: `${{ needs.changes.outputs.frontend }}`
+#            - backend: `${{ needs.changes.outputs.catalog }}`
+#            - global: `${{ needs.changes.outputs.global }}`
