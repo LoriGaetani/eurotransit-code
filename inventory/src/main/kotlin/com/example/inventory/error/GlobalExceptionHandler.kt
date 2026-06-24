@@ -3,8 +3,13 @@ package com.example.inventory.error
 import com.example.inventory.catalog.CatalogProductException
 import com.example.inventory.catalog.CatalogServiceException
 import com.example.inventory.inventory.InventoryItemException
+import com.example.inventory.reservation.InsufficientInventoryException
+import com.example.inventory.reservation.ReservationConflictException
+import com.example.inventory.reservation.ReservationNotFoundException
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -20,6 +25,7 @@ class GlobalExceptionHandler {
     @ExceptionHandler(
         CatalogProductException::class,
         InventoryItemException::class,
+        ReservationNotFoundException::class,
     )
     fun handleNotFound(
         exception: RuntimeException,
@@ -36,6 +42,20 @@ class GlobalExceptionHandler {
     ): ResponseEntity<ApiError> {
         log.warn("Catalog unavailable: method={} path={} message={}", request.method, request.requestURI, exception.message)
         return errorResponse(HttpStatus.BAD_GATEWAY, exception.message ?: "Catalog unavailable", request)
+    }
+
+    @ExceptionHandler(
+        DataIntegrityViolationException::class,
+        InsufficientInventoryException::class,
+        ReservationConflictException::class,
+        OptimisticLockingFailureException::class,
+    )
+    fun handleConflict(
+        exception: RuntimeException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ApiError> {
+        log.warn("Conflict: method={} path={} message={}", request.method, request.requestURI, exception.message)
+        return errorResponse(HttpStatus.CONFLICT, exception.message ?: "Conflict", request)
     }
 
     @ExceptionHandler(
