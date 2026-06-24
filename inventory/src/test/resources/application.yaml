@@ -1,6 +1,6 @@
 clients:
   catalog:
-    base-url: http://localhost:8080
+    base-url: http://catalog.test
 spring:
   datasource:
     url: jdbc:h2:mem:inventory-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
