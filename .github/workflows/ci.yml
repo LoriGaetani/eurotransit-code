@@ -27,6 +27,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       catalog: ${{ steps.filter.outputs.catalog }}
       inventory: ${{ steps.filter.outputs.inventory }}
+      order: ${{ steps.filter.outputs.order }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -45,6 +46,8 @@ jobs:
               - 'catalog/**'
             inventory:
               - 'inventory/**'
+            order:
+              - 'order/**'
 
   # -------------------------------------------------------------
   # JOB 1: Frontend (React + Vite + TypeScript)
@@ -135,9 +138,38 @@ jobs:
       - name: Build
         run: ./gradlew build
 
+  # -------------------------------------------------------------
+  # JOB 4: Order Service (Kotlin/Java + Spring Boot)
+  # -------------------------------------------------------------
+  order:
+    needs: changes
+    if: ${{ needs.changes.outputs.order == 'true' || needs.changes.outputs.global == 'true' }}
+    name: Order Service (Spring Boot)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: order
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build
+        run: ./gradlew build
+
   release:
     name: Release and publish Docker images
-    needs: [ changes, frontend, catalog, inventory ]
+    needs: [ changes, frontend, catalog, inventory, order ]
     if: >
       ${{
         always() &&
@@ -238,6 +270,21 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: just docker-build-push inventory
+
+      - name: Build and push order image
+        if: >
+          ${{
+            steps.version.outputs.released == 'true' &&
+            (
+              needs.changes.outputs.order == 'true' ||
+              needs.changes.outputs.global == 'true'
+            )
+          }}
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: just docker-build-push order
       # ---------------------------------------------------------
       # Update Kubernetes manifests repository
       # ---------------------------------------------------------
@@ -268,6 +315,7 @@ jobs:
           FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
           CATALOG_CHANGED: ${{ needs.changes.outputs.catalog }}
           INVENTORY_CHANGED: ${{ needs.changes.outputs.inventory }}
+          ORDER_CHANGED: ${{ needs.changes.outputs.order }}
           GLOBAL_CHANGED: ${{ needs.changes.outputs.global }}
           VALUES_FILE: deploy/charts/eurotransit-app/values.yaml
         run: |
@@ -307,6 +355,14 @@ jobs:
             echo "inventory unchanged, skipping"
           fi
 
+          if [ "${ORDER_CHANGED}" = "true" ] || [ "${GLOBAL_CHANGED}" = "true" ]; then
+            echo "Updating order image"
+            yq -i '.services.order.image.repository = "docker.io/'"${DOCKERHUB_USERNAME}"'/eurotransit-order"' "${VALUES_FILE}"
+            yq -i '.services.order.image.tag = "'"${VERSION}"'"' "${VALUES_FILE}"
+          else
+            echo "order unchanged, skipping"
+          fi
+
           echo "Updated values.yaml:"
           cat "${VALUES_FILE}"
 
@@ -330,6 +386,7 @@ jobs:
             - frontend: `${{ needs.changes.outputs.frontend }}`
             - catalog: `${{ needs.changes.outputs.catalog }}`
             - inventory: `${{ needs.changes.outputs.inventory }}`
+            - order: `${{ needs.changes.outputs.order }}`
             - global: `${{ needs.changes.outputs.global }}`
             
             

@@ -35,3 +35,4 @@ docker-build-push-all:
     just docker-build-push frontend
     just docker-build-push catalog
     just docker-build-push inventory
+    just docker-build-push order

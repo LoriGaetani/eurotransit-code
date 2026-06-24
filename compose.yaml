@@ -33,6 +33,24 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-order:
+    image: postgres:18-alpine
+    container_name: eurotransit-order-postgres
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: orders
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-order-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders -d orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres-catalog-data:
   postgres-inventory-data:
+  postgres-order-data:
